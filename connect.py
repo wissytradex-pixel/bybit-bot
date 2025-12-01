@@ -1,12 +1,12 @@
-# connect.py
 from pybit.unified_trading import HTTP
+import os
 
-API_KEY = "rTLMOhckMTNJfEKYLc"
-API_SECRET = "477OTCwP61Du6KgMmOgzWtZFDwCpfAV4xYp5"
+API_KEY = os.getenv("rTLMOhckMTNJfEKYLc")
+API_SECRET = os.getenv("477OTCwP61Du6KgMmOgzWtZFDwCpfAV4xYp5")
 
-# Connect to Bybit Testnet
+# Unified Trading API
 session = HTTP(
     api_key=API_KEY,
     api_secret=API_SECRET,
-    base_url="https://api-testnet.bybit.com"
 )
+print("Connected to Bybit Testnet successfully!")
