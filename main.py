@@ -5,71 +5,75 @@ from config import CONFIG
 import pandas as pd
 import time
 
-def calculate_qty(price, usd=CONFIG['order_qty_usd']):
-    """Convert USD trade size to coin quantity."""
-    qty = usd / price
-    return round(qty, 6)  # round to 6 decimals
+# Track open positions per symbol
+positions = {}
 
-# Track open positions to handle stop-loss & re-entry
-positions = {symbol: None for symbol in CONFIG['symbols']}
+def check_trade(symbol, signal, last_price, ema):
+    trade_amount = CONFIG["trade_amount"]
+    stop_loss_percent = CONFIG["stop_loss_percent"]
+    
+    # Check if we already have an open position
+    pos = positions.get(symbol, None)
 
-while True:
-    for symbol, ema_period in CONFIG['symbols'].items():
-        try:
-            # Fetch last 50 candles
-            candles = session.get_kline(
-                symbol=symbol,
-                interval=CONFIG['timeframe'] + "m",
-                limit=50
-            )['result']
-            df = pd.DataFrame(candles)
-            df['close'] = df['close'].astype(float)
+    if signal == "BUY":
+        if pos is None or pos["side"] == "SELL":
+            # Place buy order (simulation)
+            stop_loss = last_price * (1 - stop_loss_percent / 100)
+            positions[symbol] = {"side": "BUY", "entry": last_price, "stop_loss": stop_loss}
+            print(f"{symbol} → BUY at {last_price}, Stop Loss: {stop_loss}")
+        else:
+            # Check if stop loss is hit
+            if last_price <= pos["stop_loss"]:
+                print(f"{symbol} → BUY stop loss hit at {last_price}")
+                # Only re-enter if price closes above EMA
+                if last_price > ema:
+                    stop_loss = last_price * (1 - stop_loss_percent / 100)
+                    positions[symbol] = {"side": "BUY", "entry": last_price, "stop_loss": stop_loss}
+                    print(f"{symbol} → Re-BUY at {last_price}, Stop Loss: {stop_loss}")
+                else:
+                    positions[symbol] = None  # Close position
 
-            # Current price
-            current_price = df['close'].iloc[-1]
+    elif signal == "SELL":
+        if pos is None or pos["side"] == "BUY":
+            # Place sell order (simulation)
+            stop_loss = last_price * (1 + stop_loss_percent / 100)
+            positions[symbol] = {"side": "SELL", "entry": last_price, "stop_loss": stop_loss}
+            print(f"{symbol} → SELL at {last_price}, Stop Loss: {stop_loss}")
+        else:
+            # Check if stop loss is hit
+            if last_price >= pos["stop_loss"]:
+                print(f"{symbol} → SELL stop loss hit at {last_price}")
+                # Only re-enter if price closes below EMA
+                if last_price < ema:
+                    stop_loss = last_price * (1 + stop_loss_percent / 100)
+                    positions[symbol] = {"side": "SELL", "entry": last_price, "stop_loss": stop_loss}
+                    print(f"{symbol} → Re-SELL at {last_price}, Stop Loss: {stop_loss}")
+                else:
+                    positions[symbol] = None  # Close position
 
-            # Get EMA signal
-            signal = ema_signal(df, ema_period)
-            pos = positions[symbol]
+def run_bot():
+    time_frame = CONFIG["time_frame"]
 
-            # --- Trade logic ---
-            if signal == "BUY":
-                if not pos or pos['side'] == 'SELL':  # re-entry allowed
-                    qty = calculate_qty(current_price)
-                    order = session.place_active_order(
-                        symbol=symbol,
-                        side="Buy",
-                        order_type="Market",
-                        qty=qty,
-                        time_in_force="GoodTillCancel"
-                    )
-                    positions[symbol] = {"side": "BUY", "entry": current_price}
-                    print(f"BUY {symbol} @ {current_price}, qty={qty}")
+    while True:
+        for symbol, ema_period in CONFIG["symbols"].items():
+            try:
+                candles = session.query_kline(
+                    symbol=symbol, interval=time_frame, limit=50
+                )['result']
 
-            elif signal == "SELL":
-                if not pos or pos['side'] == 'BUY':  # re-entry allowed
-                    qty = calculate_qty(current_price)
-                    order = session.place_active_order(
-                        symbol=symbol,
-                        side="Sell",
-                        order_type="Market",
-                        qty=qty,
-                        time_in_force="GoodTillCancel"
-                    )
-                    positions[symbol] = {"side": "SELL", "entry": current_price}
-                    print(f"SELL {symbol} @ {current_price}, qty={qty}")
+                df = pd.DataFrame(candles)
+                df['close'] = df['close'].astype(float)
 
-            # --- Stop-loss check ---
-            if pos:
-                side, entry = pos['side'], pos['entry']
-                if side == "BUY" and current_price <= entry * (1 - CONFIG['stop_loss_pct']):
-                    print(f"STOP LOSS hit for {symbol} BUY @ {current_price}")
-                    positions[symbol] = None
-                elif side == "SELL" and current_price >= entry * (1 + CONFIG['stop_loss_pct']):
-                    print(f"STOP LOSS hit for {symbol} SELL @ {current_price}")
-                    positions[symbol] = None
+                signal, ema = ema_signal(df, ema_period)
+                last_price = df['close'].iloc[-1]
 
-        except Exception as e:
-            print(f"Error with {symbol}: {e}")
+                check_trade(symbol, signal, last_price, ema)
 
-    time.sleep(60)  # wait 1 minute before checking again
+            except Exception as e:
+                print(f"Error with {symbol}: {e}")
+
+        time.sleep(60)  # wait 1 minute before next check
+
+if __name__ == "__main__":
+    print("Bot is ready!")
+    run_bot()
