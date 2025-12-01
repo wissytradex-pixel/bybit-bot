@@ -1,18 +1,17 @@
 # strategy.py
 import pandas as pd
 
-def ema_signal(df, period):
+def ema_signal(df: pd.DataFrame, ema_period: int):
     """
-    Calculate EMA and return trading signal
-    Buy if price > EMA, Sell if price < EMA
+    Returns 'buy', 'sell', or None based on EMA logic
     """
-    df['ema'] = df['close'].ewm(span=period, adjust=False).mean()
+    df['ema'] = df['close'].ewm(span=ema_period, adjust=False).mean()
     last_close = df['close'].iloc[-1]
     last_ema = df['ema'].iloc[-1]
 
     if last_close > last_ema:
-        return "BUY", last_ema
+        return "buy"
     elif last_close < last_ema:
-        return "SELL", last_ema
+        return "sell"
     else:
-        return "HOLD", last_ema
+        return None
