@@ -1,17 +1,10 @@
-# strategy.py
 import pandas as pd
 
-def ema_signal(df: pd.DataFrame, ema_period: int):
-    """
-    Returns 'buy', 'sell', or None based on EMA logic
-    """
-    df['ema'] = df['close'].ewm(span=ema_period, adjust=False).mean()
-    last_close = df['close'].iloc[-1]
-    last_ema = df['ema'].iloc[-1]
-
-    if last_close > last_ema:
+def ema_signal(df, ema_period):
+    df['EMA'] = df['close'].ewm(span=ema_period, adjust=False).mean()
+    if df['close'].iloc[-1] > df['EMA'].iloc[-1]:
         return "buy"
-    elif last_close < last_ema:
+    elif df['close'].iloc[-1] < df['EMA'].iloc[-1]:
         return "sell"
     else:
-        return None
+        return "hold"
