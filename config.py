@@ -2,10 +2,13 @@
 
 CONFIG = {
     "symbols": {
-        "BTCUSDT": 380,  # EMA period example for a low coin
+        "BTCUSDT": 21,
+        "ETHUSDT": 50,
+        "DOGEUSDT": 14,
+        # Add more coins here
     },
-    "timeframe": "1",        # 1-minute candles
-    "stop_loss_pct": 0.02,   # 2% stop-loss
-    "order_qty_usd": 6.0,    # $6 per trade
-    "reentry_on_sl": True    # Re-enter if SL hit but trend still valid
+    "trade_amount": 6,          # $6 per trade
+    "leverage": 1,              # 1x leverage
+    "stop_loss_percent": 2,     # 2% stop loss
+    "time_frame": "15m"          # Global time frame for all symbols
 }
