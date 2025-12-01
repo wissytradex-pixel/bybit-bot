@@ -1,14 +1,12 @@
 # config.py
-
 CONFIG = {
+    "trade_size": 6,           # USDT per trade
+    "leverage": 1,             # 1x leverage
+    "stop_loss_percent": 2,    # 2% stop loss
     "symbols": {
-        "BTCUSDT": 21,
-        "ETHUSDT": 50,
-        "DOGEUSDT": 14,
-        # Add more coins here
-    },
-    "trade_amount": 6,          # $6 per trade
-    "leverage": 1,              # 1x leverage
-    "stop_loss_percent": 2,     # 2% stop loss
-    "time_frame": "15m"          # Global time frame for all symbols
+        "BTCUSDT": {"ema": 21, "timeframe": "1m"},
+        "ETHUSDT": {"ema": 50, "timeframe": "1m"},
+        "DOGEUSDT": {"ema": 10, "timeframe": "1m"},
+        # Add more symbols here
+    }
 }
