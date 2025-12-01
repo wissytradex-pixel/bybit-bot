@@ -1,3 +1,4 @@
 flask
 pybit==5.7.0
 requests
+pandas
