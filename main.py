@@ -1,78 +1,94 @@
 # main.py
-from connect import session
-from strategy import ema_signal
-from config import CONFIG
-import pandas as pd
 import time
+from pybit.unified_trading import HTTP
+from config import CONFIG
 
-# Track open positions per symbol
-positions = {}
+# Your Bybit Testnet API keys
+API_KEY = "YOUR_API_KEY"
+API_SECRET = "YOUR_API_SECRET"
 
-def check_trade(symbol, signal, last_price, ema):
-    trade_amount = CONFIG["trade_amount"]
-    stop_loss_percent = CONFIG["stop_loss_percent"]
-    
-    # Check if we already have an open position
-    pos = positions.get(symbol, None)
+# Connect to Bybit Testnet
+session = HTTP(api_key=API_KEY, api_secret=API_SECRET)
+print("Connected to Bybit Testnet successfully!")
 
-    if signal == "BUY":
-        if pos is None or pos["side"] == "SELL":
-            # Place buy order (simulation)
-            stop_loss = last_price * (1 - stop_loss_percent / 100)
-            positions[symbol] = {"side": "BUY", "entry": last_price, "stop_loss": stop_loss}
-            print(f"{symbol} → BUY at {last_price}, Stop Loss: {stop_loss}")
-        else:
-            # Check if stop loss is hit
-            if last_price <= pos["stop_loss"]:
-                print(f"{symbol} → BUY stop loss hit at {last_price}")
-                # Only re-enter if price closes above EMA
-                if last_price > ema:
-                    stop_loss = last_price * (1 - stop_loss_percent / 100)
-                    positions[symbol] = {"side": "BUY", "entry": last_price, "stop_loss": stop_loss}
-                    print(f"{symbol} → Re-BUY at {last_price}, Stop Loss: {stop_loss}")
-                else:
-                    positions[symbol] = None  # Close position
+# Track open trades and stop-loss hits
+open_trades = {}
+stop_loss_hit = {}
 
-    elif signal == "SELL":
-        if pos is None or pos["side"] == "BUY":
-            # Place sell order (simulation)
-            stop_loss = last_price * (1 + stop_loss_percent / 100)
-            positions[symbol] = {"side": "SELL", "entry": last_price, "stop_loss": stop_loss}
-            print(f"{symbol} → SELL at {last_price}, Stop Loss: {stop_loss}")
-        else:
-            # Check if stop loss is hit
-            if last_price >= pos["stop_loss"]:
-                print(f"{symbol} → SELL stop loss hit at {last_price}")
-                # Only re-enter if price closes below EMA
-                if last_price < ema:
-                    stop_loss = last_price * (1 + stop_loss_percent / 100)
-                    positions[symbol] = {"side": "SELL", "entry": last_price, "stop_loss": stop_loss}
-                    print(f"{symbol} → Re-SELL at {last_price}, Stop Loss: {stop_loss}")
-                else:
-                    positions[symbol] = None  # Close position
+def get_latest_candle(symbol, interval):
+    """Fetch the latest closed candle."""
+    kline = session.get_kline(symbol=symbol, interval=interval, limit=2)
+    # Last candle is usually the current forming candle, second last is closed
+    return kline['result'][0]  # Adjust if API returns differently
+
+def calculate_ema(symbol, interval, period):
+    """Calculate EMA using recent closes."""
+    kline = session.get_kline(symbol=symbol, interval=interval, limit=period+1)
+    closes = [float(c['close']) for c in kline['result']]
+    ema = sum(closes[-period:]) / period  # Simple EMA approx
+    return ema
+
+def check_signal(symbol):
+    """Check if the candle confirms EMA direction."""
+    tf = CONFIG["time_frame"]
+    ema_period = CONFIG["symbols"][symbol]["ema"]
+    candle = get_latest_candle(symbol, tf)
+    ema = calculate_ema(symbol, tf, ema_period)
+    close_price = float(candle['close'])
+
+    if close_price > ema:
+        return "long"
+    elif close_price < ema:
+        return "short"
+    return None
+
+def enter_trade(symbol, direction):
+    """Enter trade with stop-loss."""
+    size = CONFIG["trade_size"]
+    leverage = CONFIG["leverage"]
+    # Example market order, adjust as needed
+    print(f"Entering {direction} trade on {symbol}, size: {size} USDT")
+    open_trades[symbol] = direction
+    stop_loss_hit[symbol] = False
+
+def check_stop_loss(symbol, direction):
+    """Check if stop-loss would have been hit (mock logic)."""
+    candle = get_latest_candle(symbol, CONFIG["time_frame"])
+    low = float(candle['low'])
+    high = float(candle['high'])
+    stop_loss_price = float(candle['close']) * (1 - CONFIG["stop_loss_percent"]/100 if direction=="long" else 1 + CONFIG["stop_loss_percent"]/100)
+
+    if direction == "long" and low <= stop_loss_price:
+        return True
+    elif direction == "short" and high >= stop_loss_price:
+        return True
+    return False
 
 def run_bot():
-    time_frame = CONFIG["time_frame"]
-
     while True:
-        for symbol, ema_period in CONFIG["symbols"].items():
-            try:
-                candles = session.query_kline(
-                    symbol=symbol, interval=time_frame, limit=50
-                )['result']
+        tf = CONFIG.get("time_frame", "1m")  # Default timeframe
+        for symbol in CONFIG["symbols"]:
+            direction = check_signal(symbol)
 
-                df = pd.DataFrame(candles)
-                df['close'] = df['close'].astype(float)
+            # Stop-loss re-entry
+            if stop_loss_hit.get(symbol):
+                if direction == open_trades.get(symbol):
+                    print(f"Re-entering {symbol} after stop-loss confirmation")
+                    enter_trade(symbol, direction)
+                continue
 
-                signal, ema = ema_signal(df, ema_period)
-                last_price = df['close'].iloc[-1]
+            # New trade entry
+            if direction and symbol not in open_trades:
+                enter_trade(symbol, direction)
 
-                check_trade(symbol, signal, last_price, ema)
+            # Check stop-loss
+            if symbol in open_trades:
+                if check_stop_loss(symbol, open_trades[symbol]):
+                    print(f"Stop-loss hit for {symbol} {open_trades[symbol]} trade")
+                    stop_loss_hit[symbol] = True
+                    del open_trades[symbol]
 
-            except Exception as e:
-                print(f"Error with {symbol}: {e}")
-
-        time.sleep(60)  # wait 1 minute before next check
+        time.sleep(60)  # Wait for next candle
 
 if __name__ == "__main__":
     print("Bot is ready!")
