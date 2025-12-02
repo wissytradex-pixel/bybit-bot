@@ -1,5 +1,4 @@
-flask==3.1.2
-pybit==5.7.0
-requests==2.32.5
-pandas==2.3.3
-pycryptodome>=3.20.0
+pybit
+pandas
+requests
+python-telegram-bot==13.15
